@@ -9,52 +9,83 @@
     android:padding="0dp"
     tools:context=".MainActivity">
 
-    <!-- Centered vertical layout for time and date -->
+    <!-- Container for burn-in prevention -->
     <LinearLayout
         android:id="@+id/clockContainer"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center_horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal"
+        android:gravity="center"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- Time TextClock -->
+        <!-- Large left-aligned main time -->
         <TextClock
-            android:id="@+id/textClock"
+            android:id="@+id/textClockMain"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="32dp"
             android:format12Hour="hh:mm"
             android:format24Hour="HH:mm"
-            android:textColor="#E0E0E0"
-            android:textSize="120sp" />
+            android:textColor="#88C7FF"
+            android:textSize="90sp"
+            android:fontFamily="sans-serif-black"
+            android:textStyle="bold"
+            android:gravity="start"
+            android:textAlignment="viewStart"
+            android:singleLine="true" />
 
-        <!-- Date TextClock -->
-        <TextClock
-            android:id="@+id/dateClock"
-            android:layout_width="wrap_content"
+        <!-- Right-side compact widget stack -->
+        <LinearLayout
+            android:id="@+id/rightStack"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:format12Hour="EEEE, MMMM d"
-            android:format24Hour="EEEE, MMMM d"
-            android:textColor="#E0E0E0"
-            android:textSize="24sp" />
+            android:layout_weight="0.35"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:layout_marginEnd="24dp">
 
+            <!-- Date (THU 25) - uses TextClock so it updates -->
+            <TextClock
+                android:id="@+id/dateShort"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:format12Hour="EEE d"
+                android:format24Hour="EEE d"
+                android:textAllCaps="true"
+                android:textColor="#FFFFFF"
+                android:textSize="32sp"
+                android:fontFamily="sans-serif-black"
+                android:textStyle="bold"
+                android:letterSpacing="0.05" />
+
+            <!-- Temperature placeholder (74°). Replace value programmatically with live data. -->
+            <TextView
+                android:id="@+id/tempView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="74°"
+                android:textColor="#FFFFFF"
+                android:textSize="28sp"
+                android:layout_marginTop="6dp"
+                android:fontFamily="sans-serif-black"
+                android:textStyle="bold" />
+
+            <!-- Battery Indicator -->
+            <TextView
+                android:id="@+id/batteryIndicator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Battery: --%"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:layout_marginTop="6dp"
+                android:fontFamily="sans-serif-black"
+                android:textStyle="bold" />
+
+        </LinearLayout>
     </LinearLayout>
-
-    <!-- Battery indicator at bottom center -->
-    <TextView
-        android:id="@+id/batteryIndicator"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="24dp"
-        android:text="Battery: 100%"
-        android:textColor="#E0E0E0"
-        android:textSize="14sp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

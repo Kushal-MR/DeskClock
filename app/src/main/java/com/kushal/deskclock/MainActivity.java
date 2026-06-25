@@ -25,7 +25,15 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.Random;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
@@ -43,6 +51,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private static final float LUX_THRESHOLD = 5f;
     private static final float DIM_BRIGHTNESS = 0.05f;
     private static final float NORMAL_BRIGHTNESS = 1.0f;
+    
+    private TextView tempView;
+    private Handler weatherHandler;
+    private Runnable weatherRunnable;
+    private ExecutorService executorService;
+    private static final long WEATHER_REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes
+    private static final String WEATHER_API_URL = "https://api.open-meteo.com/v1/forecast?latitude=12.9716&longitude=77.5946&current_weather=true";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,6 +100,15 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         if (sensorManager != null) {
             lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
         }
+
+        // Get temperature view and setup weather fetching
+        tempView = findViewById(R.id.tempView);
+        executorService = Executors.newSingleThreadExecutor();
+        weatherHandler = new Handler(Looper.getMainLooper());
+        setupWeatherRefresh();
+
+        // Fetch weather immediately on startup
+        fetchWeather();
     }
 
     @Override
@@ -105,6 +129,51 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
         // No action needed
+    }
+
+    private void setupWeatherRefresh() {
+        weatherRunnable = new Runnable() {
+            @Override
+            public void run() {
+                fetchWeather();
+                weatherHandler.postDelayed(this, WEATHER_REFRESH_INTERVAL);
+            }
+        };
+    }
+
+    private void fetchWeather() {
+        executorService.execute(() -> {
+            try {
+                URL url = new URL(WEATHER_API_URL);
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(5000);
+                connection.setReadTimeout(5000);
+
+                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                StringBuilder response = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    response.append(line);
+                }
+                reader.close();
+                connection.disconnect();
+
+                JSONObject jsonResponse = new JSONObject(response.toString());
+                JSONObject currentWeather = jsonResponse.getJSONObject("current_weather");
+                double temperatureCelsius = currentWeather.getDouble("temperature");
+                
+                // Update UI on main thread
+                weatherHandler.post(() -> {
+                    if (tempView != null) {
+                        int tempFahrenheit = (int) (temperatureCelsius * 9 / 5 + 32);
+                        tempView.setText(tempFahrenheit + "°");
+                    }
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     private void setupBatteryReceiver() {
@@ -159,6 +228,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         if (sensorManager != null && lightSensor != null) {
             sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
         }
+
+        // Start weather refresh
+        if (weatherHandler != null && weatherRunnable != null) {
+            weatherHandler.post(weatherRunnable);
+        }
     }
 
     @Override
@@ -179,6 +253,20 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         // Unregister light sensor listener
         if (sensorManager != null) {
             sensorManager.unregisterListener(this);
+        }
+
+        // Stop weather refresh
+        if (weatherHandler != null && weatherRunnable != null) {
+            weatherHandler.removeCallbacks(weatherRunnable);
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // Clean up executor service
+        if (executorService != null && !executorService.isShutdown()) {
+            executorService.shutdown();
         }
     }
 }
