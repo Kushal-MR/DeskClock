@@ -64,6 +64,10 @@
                 android:ellipsize="none"
                 android:includeFontPadding="false"
                 android:letterSpacing="-0.03"
+                android:shadowColor="#FF6B35"
+                android:shadowDx="0"
+                android:shadowDy="0"
+                android:shadowRadius="6"
                 android:autoSizeTextType="uniform"
                 android:autoSizeMinTextSize="40sp"
                 android:autoSizeMaxTextSize="220sp"
@@ -77,7 +81,7 @@
                 android:format12Hour="a"
                 android:format24Hour=""
                 android:textColor="#FF9D6B"
-                android:textSize="22sp"
+                android:textSize="28sp"
                 android:fontFamily="@font/nunito_black"
                 android:gravity="center"
                 android:letterSpacing="0.20"
@@ -108,13 +112,14 @@
 
             <!-- ─── WEATHER WIDGET ─────────────────────────────────────── -->
             <LinearLayout
+                android:id="@+id/weatherCard"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_weight="1"
+                android:layout_weight="0.85"
                 android:orientation="vertical"
                 android:gravity="center"
                 android:background="@drawable/widget_card_bg"
-                android:padding="18dp">
+                android:padding="12dp">
 
                 <!-- Temperature — big, readable from across the room -->
                 <TextView
@@ -152,13 +157,14 @@
 
             <!-- ─── DATE WIDGET ────────────────────────────────────────── -->
             <LinearLayout
+                android:id="@+id/dateCard"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_weight="1"
+                android:layout_weight="1.15"
                 android:orientation="vertical"
                 android:gravity="center"
                 android:background="@drawable/widget_card_bg"
-                android:padding="18dp">
+                android:padding="12dp">
 
                 <!-- Day of week — bold orange label -->
                 <TextClock
@@ -169,7 +175,7 @@
                     android:format24Hour="EEE"
                     android:textAllCaps="true"
                     android:textColor="#FF9D6B"
-                    android:textSize="18sp"
+                    android:textSize="24sp"
                     android:fontFamily="sans-serif-medium"
                     android:letterSpacing="0.22"
                     android:includeFontPadding="false" />
@@ -197,7 +203,7 @@
                     android:format24Hour="MMMM"
                     android:textAllCaps="true"
                     android:textColor="#FF9D6B"
-                    android:textSize="15sp"
+                    android:textSize="20sp"
                     android:fontFamily="sans-serif-medium"
                     android:letterSpacing="0.22"
                     android:includeFontPadding="false"
@@ -233,5 +239,88 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         tools:text="87% ⚡" />
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         THEME PICKER OVERLAY — full-screen dim + bottom sheet card.
+         Triggered by long-press on root. Initially GONE.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <FrameLayout
+        android:id="@+id/themePickerOverlay"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#CC000000"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true"
+        android:elevation="12dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- Bottom sheet slides up from below -->
+        <LinearLayout
+            android:id="@+id/pickerSheet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:orientation="vertical"
+            android:background="@drawable/sheet_bg"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingBottom="20dp">
+
+            <!-- Drag handle -->
+            <View
+                android:layout_width="44dp"
+                android:layout_height="4dp"
+                android:background="#44FFFFFF"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="16dp" />
+
+            <!-- Title -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="CHOOSE THEME"
+                android:textColor="#777777"
+                android:textSize="10sp"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.30"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="20dp" />
+
+            <!-- Horizontally scrollable theme cards — populated in Java -->
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp">
+
+                <LinearLayout
+                    android:id="@+id/themeCardsContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical" />
+
+            </HorizontalScrollView>
+
+            <!-- Hint text -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Long-press anywhere to open themes"
+                android:textColor="#444444"
+                android:textSize="9sp"
+                android:fontFamily="sans-serif"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp" />
+
+        </LinearLayout>
+
+    </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

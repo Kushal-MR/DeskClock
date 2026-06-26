@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Bottom sheet background for the theme picker.
+    Very dark, warm-black with rounded top corners — matches the iOS sheet aesthetic.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <solid android:color="#171717" />
+
+    <corners
+        android:topLeftRadius="24dp"
+        android:topRightRadius="24dp" />
+
+</shape>
