@@ -87,9 +87,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private ViewPager2 faceViewPager;
     private ClockFacePagerAdapter pagerAdapter;
 
-    // ─── Dot indicators ──────────────────────────────────────────────────────
     private View dot0;
     private View dot1;
+    private View dot2;
+    private BroadcastReceiver spotifyReceiver;
+    private String lastSpotifyTrack = "";
+    private String lastSpotifyArtist = "";
 
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -121,8 +124,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         pagerAdapter  = new ClockFacePagerAdapter(this);
         faceViewPager.setAdapter(pagerAdapter);
 
-        // Keep both fragments alive at all times so data can be pushed to both
-        faceViewPager.setOffscreenPageLimit(1);
+        // Keep all 3 fragments alive at all times so data can be pushed to them
+        faceViewPager.setOffscreenPageLimit(2);
 
         // Restore last-selected face
         int savedFace = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
@@ -141,11 +144,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         // ── Dot indicators ────────────────────────────────────────────────────
         dot0 = findViewById(R.id.dot0);
         dot1 = findViewById(R.id.dot1);
+        dot2 = findViewById(R.id.dot2);
         setupDots();
         updateDots(savedFace);
 
-        // ── Battery ───────────────────────────────────────────────────────────
+        // ── Battery & Spotify ──────────────────────────────────────────────────
         setupBatteryReceiver();
+        setupSpotifyReceiver();
 
         // ── Light sensor ──────────────────────────────────────────────────────
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
@@ -174,6 +179,37 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     new IntentFilter(Intent.ACTION_BATTERY_CHANGED),
                     Context.RECEIVER_NOT_EXPORTED);
         }
+        
+        if (spotifyReceiver != null) {
+            IntentFilter filter = new IntentFilter();
+            filter.addAction("com.spotify.music.metadatachanged");
+            filter.addAction("com.spotify.music.playbackstatechanged");
+            registerReceiver(spotifyReceiver, filter, Context.RECEIVER_EXPORTED);
+        }
+
+        // Register the NotificationListener callback for MediaSession-based detection
+        SpotifyNotificationListener.setMetadataCallback((track, artist, album, isPlaying) -> {
+            if (track != null && artist != null) {
+                if (!track.equals(lastSpotifyTrack) || !artist.equals(lastSpotifyArtist)) {
+                    lastSpotifyTrack = track;
+                    lastSpotifyArtist = artist;
+
+                    if (isPlaying && faceViewPager != null && faceViewPager.getCurrentItem() != 2) {
+                        faceViewPager.setCurrentItem(2, true);
+                    }
+                }
+
+                List<Fragment> fragments = getSupportFragmentManager().getFragments();
+                for (Fragment f : fragments) {
+                    if (f instanceof ClockFaceContract && f.isAdded()) {
+                        ((ClockFaceContract) f).onSpotifyUpdate(track, artist, album, isPlaying);
+                    }
+                }
+            }
+        });
+
+        // Check if notification listener permission is granted
+        checkNotificationListenerPermission();
 
         // Light sensor
         if (sensorManager != null && lightSensor != null) {
@@ -196,6 +232,12 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             } catch (IllegalArgumentException ignored) {
                 // Was not registered (edge case on quick onCreate→onPause)
             }
+        }
+        
+        if (spotifyReceiver != null) {
+            try {
+                unregisterReceiver(spotifyReceiver);
+            } catch (IllegalArgumentException ignored) {}
         }
 
         if (sensorManager != null) {
@@ -239,11 +281,13 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private void setupDots() {
         setDotDrawable(dot0, 0x88FFFFFF);
         setDotDrawable(dot1, 0x44FFFFFF);
+        setDotDrawable(dot2, 0x44FFFFFF);
     }
 
     private void updateDots(int activePosition) {
         setDotDrawable(dot0, activePosition == 0 ? 0xBBFFFFFF : 0x44FFFFFF);
         setDotDrawable(dot1, activePosition == 1 ? 0xBBFFFFFF : 0x44FFFFFF);
+        setDotDrawable(dot2, activePosition == 2 ? 0xBBFFFFFF : 0x44FFFFFF);
     }
 
     private void setDotDrawable(View dot, int color) {
@@ -304,6 +348,40 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                                 || status == BatteryManager.BATTERY_STATUS_FULL;
 
                 forwardBatteryToFaces(percent, isCharging);
+            }
+        };
+    }
+    
+    private void setupSpotifyReceiver() {
+        spotifyReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+                if (action == null) return;
+                
+                String track = intent.getStringExtra("track");
+                String artist = intent.getStringExtra("artist");
+                String album = intent.getStringExtra("album");
+                boolean isPlaying = intent.getBooleanExtra("playing", false);
+                
+                if (track != null && artist != null) {
+                    if (!track.equals(lastSpotifyTrack) || !artist.equals(lastSpotifyArtist)) {
+                        lastSpotifyTrack = track;
+                        lastSpotifyArtist = artist;
+                        
+                        // If a new track starts playing, automatically switch to the Spotify face
+                        if (isPlaying && faceViewPager != null && faceViewPager.getCurrentItem() != 2) {
+                            faceViewPager.setCurrentItem(2, true);
+                        }
+                    }
+                    
+                    List<Fragment> fragments = getSupportFragmentManager().getFragments();
+                    for (Fragment f : fragments) {
+                        if (f instanceof ClockFaceContract && f.isAdded()) {
+                            ((ClockFaceContract) f).onSpotifyUpdate(track, artist, album, isPlaying);
+                        }
+                    }
+                }
             }
         };
     }
@@ -397,5 +475,33 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 weatherHandler.post(() -> forwardWeatherToFaces(finalText));
             }
         });
+    }
+
+    /**
+     * Checks if the app has Notification Listener permission.
+     * If not, prompts the user to enable it in Settings (required for
+     * automatic Spotify track detection via MediaSession).
+     */
+    private void checkNotificationListenerPermission() {
+        String enabledListeners = android.provider.Settings.Secure.getString(
+                getContentResolver(), "enabled_notification_listeners");
+        if (enabledListeners == null || !enabledListeners.contains(getPackageName())) {
+            // Only prompt once per app install — check a preference flag
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+            if (!prefs.getBoolean("notification_permission_asked", false)) {
+                prefs.edit().putBoolean("notification_permission_asked", true).apply();
+                new android.app.AlertDialog.Builder(this)
+                        .setTitle("Enable Auto Spotify Detection")
+                        .setMessage("To automatically detect songs playing on your other devices, " +
+                                "please grant Notification Access to DeskClock.\n\n" +
+                                "This lets the app read Spotify's media session.")
+                        .setPositiveButton("Open Settings", (d, w) -> {
+                            startActivity(new Intent(
+                                    "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));
+                        })
+                        .setNegativeButton("Later", null)
+                        .show();
+            }
+        }
     }
 }

@@ -61,6 +61,12 @@
             android:layout_height="7dp"
             android:layout_margin="4dp" />
 
+        <View
+            android:id="@+id/dot2"
+            android:layout_width="7dp"
+            android:layout_height="7dp"
+            android:layout_margin="4dp" />
+
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

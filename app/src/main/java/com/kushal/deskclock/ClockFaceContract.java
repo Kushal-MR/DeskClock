@@ -25,4 +25,9 @@ public interface ClockFaceContract {
      * @param tempText display-ready string, e.g. "28°C"
      */
     void onWeatherUpdate(String tempText);
+
+    /**
+     * Called when a Spotify broadcast is received.
+     */
+    default void onSpotifyUpdate(String track, String artist, String album, boolean isPlaying) {}
 }

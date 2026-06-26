@@ -47,6 +47,16 @@
 
         </activity>
 
+        <!-- Notification Listener for Spotify media session detection -->
+        <service
+            android:name=".SpotifyNotificationListener"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
     </application>
 
 </manifest>

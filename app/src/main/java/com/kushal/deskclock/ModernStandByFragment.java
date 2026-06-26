@@ -29,11 +29,11 @@ public class ModernStandByFragment extends Fragment implements ClockFaceContract
     private boolean pickerVisible = false;
 
     // ─── Cached view references ───────────────────────────────────────────────
-    private TextView textClockTime;
-    private TextView textClockAmPm;
-    private TextView textClockDayName;
-    private TextView textClockDate;
-    private TextView textClockMonth;
+    private CustomFontTextClock textClockTime;
+    private CustomFontTextClock textClockAmPm;
+    private CustomFontTextClock textClockDayName;
+    private CustomFontTextClock textClockDate;
+    private CustomFontTextClock textClockMonth;
     private TextView tempView;
     private TextView locationLabel;
     private TextView batteryIndicator;
@@ -70,6 +70,26 @@ public class ModernStandByFragment extends Fragment implements ClockFaceContract
         themePickerOverlay  = root.findViewById(R.id.themePickerOverlay);
         pickerSheet         = root.findViewById(R.id.pickerSheet);
         themeCardsContainer = root.findViewById(R.id.themeCardsContainer);
+
+        try {
+            android.graphics.Typeface outfitBold = android.graphics.Typeface.createFromAsset(requireContext().getAssets(), "fonts/outfit_bold.ttf");
+            android.graphics.Typeface outfitMedium = android.graphics.Typeface.createFromAsset(requireContext().getAssets(), "fonts/outfit_medium.ttf");
+            
+            if (outfitBold != null) {
+                textClockTime.setTypeface(outfitBold);
+            }
+            if (outfitMedium != null) {
+                textClockAmPm.setTypeface(outfitMedium);
+                textClockDayName.setTypeface(outfitMedium);
+                textClockDate.setTypeface(outfitMedium);
+                textClockMonth.setTypeface(outfitMedium);
+                tempView.setTypeface(outfitMedium);
+                locationLabel.setTypeface(outfitMedium);
+                batteryIndicator.setTypeface(outfitMedium);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 
         return root;
     }

@@ -22,15 +22,13 @@ public class ClockFacePagerAdapter extends FragmentStateAdapter {
     @NonNull
     @Override
     public Fragment createFragment(int position) {
-        if (position == 0) {
-            return new ModernStandByFragment();
-        } else {
-            return new RetroSplitFlapFragment();
-        }
+        if (position == 0) return new ModernStandByFragment();
+        if (position == 1) return new RetroSplitFlapFragment();
+        return new SpotifyStandByFragment();
     }
 
     @Override
     public int getItemCount() {
-        return FACE_COUNT;
+        return 3;
     }
 }
