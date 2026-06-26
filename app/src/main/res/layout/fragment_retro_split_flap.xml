@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/retroRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!-- Main content: centered clock + info row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <!-- Split-flap digit row -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:paddingTop="20dp">
+
+            <!-- Tens of hours -->
+            <com.kushal.deskclock.SplitFlapView
+                android:id="@+id/digitH1"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_margin="4dp" />
+
+            <!-- Hours -->
+            <com.kushal.deskclock.SplitFlapView
+                android:id="@+id/digitH0"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_margin="4dp" />
+
+            <!-- Static colon separator -->
+            <TextView
+                android:id="@+id/colonSeparator"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:text=":"
+                android:textColor="#F5F5F0"
+                android:textSize="80sp"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp" />
+
+            <!-- Tens of minutes -->
+            <com.kushal.deskclock.SplitFlapView
+                android:id="@+id/digitM1"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_margin="4dp" />
+
+            <!-- Minutes -->
+            <com.kushal.deskclock.SplitFlapView
+                android:id="@+id/digitM0"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_margin="4dp" />
+        </LinearLayout>
+
+        <!-- Info row: date + battery -->
+        <LinearLayout
+            android:id="@+id/retroInfoRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingBottom="24dp"
+            android:paddingTop="12dp">
+
+            <TextView
+                android:id="@+id/retroDate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="THU • JUN 26"
+                android:textColor="#666666"
+                android:textSize="22sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.15"
+                android:includeFontPadding="false" />
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="20dp"
+                android:background="#333333"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp" />
+
+            <TextView
+                android:id="@+id/retroBattery"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="––%"
+                android:textColor="#666666"
+                android:textSize="22sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.15"
+                android:includeFontPadding="false" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Theme picker overlay (same bottom-sheet pattern as Modern face) -->
+    <FrameLayout
+        android:id="@+id/retroThemePickerOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#CC000000"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true"
+        android:elevation="12dp">
+
+        <LinearLayout
+            android:id="@+id/retroPickerSheet"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:orientation="vertical"
+            android:background="@drawable/sheet_bg"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingBottom="20dp">
+
+            <!-- Drag handle -->
+            <View
+                android:layout_width="44dp"
+                android:layout_height="4dp"
+                android:background="#44FFFFFF"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="CHOOSE STYLE"
+                android:textColor="#777777"
+                android:textSize="10sp"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.30"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="20dp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp">
+
+                <LinearLayout
+                    android:id="@+id/retroThemeCardsContainer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical" />
+
+            </HorizontalScrollView>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Long-press anywhere to change style"
+                android:textColor="#444444"
+                android:textSize="9sp"
+                android:fontFamily="sans-serif"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp" />
+
+        </LinearLayout>
+    </FrameLayout>
+
+</FrameLayout>

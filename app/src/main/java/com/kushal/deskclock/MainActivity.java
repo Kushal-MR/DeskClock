@@ -1,11 +1,10 @@
 package com.kushal.deskclock;
 
-import android.animation.ObjectAnimator;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.graphics.Typeface;
+import android.content.SharedPreferences;
 import android.graphics.drawable.GradientDrawable;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -15,18 +14,16 @@ import android.os.BatteryManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.view.animation.DecelerateInterpolator;
 import android.widget.LinearLayout;
-import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.fragment.app.Fragment;
+import androidx.viewpager2.widget.ViewPager2;
 
 import org.json.JSONObject;
 
@@ -34,14 +31,28 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * Multi-Face Smart Display — host activity.
+ *
+ * This activity owns all global background services:
+ *   • Open-Meteo weather API polling
+ *   • Battery state BroadcastReceiver
+ *   • Ambient light sensor → adaptive brightness
+ *
+ * The UI is a ViewPager2 that hosts two Clock Face fragments.
+ * Each fragment implements {@link ClockFaceContract} to receive
+ * battery and weather data downstream from these services.
+ *
+ * Face selection persists in SharedPreferences so the app
+ * always launches into the user's preferred aesthetic.
+ */
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
     // ─── Weather ──────────────────────────────────────────────────────────────
-    // Open-Meteo free API — no API key required.
-    // Bengaluru coordinates: 12.9716 N, 77.5946 E
     private static final String WEATHER_URL =
             "https://api.open-meteo.com/v1/forecast"
                     + "?latitude=12.9716&longitude=77.5946"
@@ -49,18 +60,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     + "&temperature_unit=celsius";
     private static final long WEATHER_REFRESH_MS = 30 * 60_000L; // 30 minutes
 
-    private TextView tempView;
     private Handler weatherHandler;
     private Runnable weatherRunnable;
     private ExecutorService weatherExecutor;
+    private String lastWeatherText;    // cached for pushing to new fragments
 
     // ─── Battery ──────────────────────────────────────────────────────────────
-    private TextView batteryIndicator;
     private BroadcastReceiver batteryReceiver;
+    private int lastBatteryPercent = -1;
+    private boolean lastBatteryCharging = false;
 
     // ─── Ambient light sensor ─────────────────────────────────────────────────
-    // Below LUX_DIM_THRESHOLD → screen dims to DIM_BRIGHTNESS.
-    // Hysteresis gap prevents flickering at the boundary.
     private static final float LUX_DIM_THRESHOLD    = 5f;
     private static final float LUX_BRIGHT_THRESHOLD = 10f;
     private static final float DIM_BRIGHTNESS       = 0.04f;
@@ -70,22 +80,16 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private SensorManager sensorManager;
     private Sensor lightSensor;
 
-    // ─── Theme ────────────────────────────────────────────────────────────────
-    private int currentTheme = ThemeManager.THEME_NEON_BLAZE;
-    private boolean pickerVisible = false;
+    // ─── ViewPager2 / Multi-Face ──────────────────────────────────────────────
+    private static final String PREFS_NAME = "deskclock_prefs";
+    private static final String KEY_FACE   = "selected_face";
 
-    // Cached view references — bound once in onCreate for fast theme switching
-    private TextView textClockTime;
-    private TextView textClockAmPm;
-    private TextView textClockDayName;
-    private TextView textClockDate;
-    private TextView textClockMonth;
-    private TextView locationLabel;
-    private LinearLayout weatherCard;
-    private LinearLayout dateCard;
-    private View       themePickerOverlay;
-    private LinearLayout pickerSheet;
-    private LinearLayout themeCardsContainer;
+    private ViewPager2 faceViewPager;
+    private ClockFacePagerAdapter pagerAdapter;
+
+    // ─── Dot indicators ──────────────────────────────────────────────────────
+    private View dot0;
+    private View dot1;
 
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -112,34 +116,33 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         View rootView = findViewById(R.id.root_container);
         rootView.setOnApplyWindowInsetsListener((v, insets) -> insets);
 
-        // ── Cache view references ─────────────────────────────────────────────
-        textClockTime       = findViewById(R.id.textClockTime);
-        textClockAmPm       = findViewById(R.id.textClockAmPm);
-        textClockDayName    = findViewById(R.id.textClockDayName);
-        textClockDate       = findViewById(R.id.textClockDate);
-        textClockMonth      = findViewById(R.id.textClockMonth);
-        tempView            = findViewById(R.id.tempView);
-        locationLabel       = findViewById(R.id.locationLabel);
-        batteryIndicator    = findViewById(R.id.batteryIndicator);
-        weatherCard         = findViewById(R.id.weatherCard);
-        dateCard            = findViewById(R.id.dateCard);
-        themePickerOverlay  = findViewById(R.id.themePickerOverlay);
-        pickerSheet         = findViewById(R.id.pickerSheet);
-        themeCardsContainer = findViewById(R.id.themeCardsContainer);
+        // ── ViewPager2 setup ──────────────────────────────────────────────────
+        faceViewPager = findViewById(R.id.faceViewPager);
+        pagerAdapter  = new ClockFacePagerAdapter(this);
+        faceViewPager.setAdapter(pagerAdapter);
 
-        // ── Load & apply saved theme ──────────────────────────────────────────
-        currentTheme = ThemeManager.load(this);
-        buildThemeCards();
-        applyTheme(currentTheme, false);
+        // Keep both fragments alive at all times so data can be pushed to both
+        faceViewPager.setOffscreenPageLimit(1);
 
-        // ── Long-press → show theme picker ────────────────────────────────────
-        rootView.setOnLongClickListener(v -> {
-            showThemePicker();
-            return true;
+        // Restore last-selected face
+        int savedFace = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .getInt(KEY_FACE, 0);
+        faceViewPager.setCurrentItem(savedFace, false);
+
+        // Track page changes → persist + update dots
+        faceViewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
+            @Override
+            public void onPageSelected(int position) {
+                saveFace(position);
+                updateDots(position);
+            }
         });
 
-        // Tap on dim backdrop → dismiss picker
-        themePickerOverlay.setOnClickListener(v -> hideThemePicker());
+        // ── Dot indicators ────────────────────────────────────────────────────
+        dot0 = findViewById(R.id.dot0);
+        dot1 = findViewById(R.id.dot1);
+        setupDots();
+        updateDots(savedFace);
 
         // ── Battery ───────────────────────────────────────────────────────────
         setupBatteryReceiver();
@@ -211,220 +214,75 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     }
 
     // ═════════════════════════════════════════════════════════════════════════
-    // Theme System
+    // Multi-Face: ViewPager2 Controls
     // ═════════════════════════════════════════════════════════════════════════
 
     /**
-     * Applies a complete color theme to every themed view.
-     *
-     * @param themeId one of ThemeManager.THEME_*
-     * @param save    whether to persist the choice to SharedPreferences
+     * Called by fragments to disable/re-enable swipe navigation
+     * (e.g. when the theme picker bottom sheet is open).
      */
-    private void applyTheme(int themeId, boolean save) {
-        currentTheme = themeId;
-        if (save) ThemeManager.save(this, themeId);
-
-        int primary   = ThemeManager.PRIMARY[themeId];
-        int secondary = ThemeManager.SECONDARY[themeId];
-        int dim       = ThemeManager.DIM[themeId];
-        int cardBg    = ThemeManager.CARD_BG[themeId];
-        int border    = ThemeManager.BORDER[themeId];
-
-        // ── Clock digits ──────────────────────────────────────────────────────
-        if (textClockTime != null) {
-            textClockTime.setTextColor(primary);
-            // Tight same-colour glow — makes strokes appear thicker and vibrant
-            textClockTime.setShadowLayer(8f, 0f, 0f, primary);
-        }
-
-        // ── Accent / secondary labels ─────────────────────────────────────────
-        if (textClockAmPm    != null) textClockAmPm.setTextColor(secondary);
-        if (textClockDayName != null) textClockDayName.setTextColor(secondary);
-        if (textClockMonth   != null) textClockMonth.setTextColor(secondary);
-        if (tempView         != null) tempView.setTextColor(primary);
-
-        // ── Date number stays near-white for maximum readability ──────────────
-        if (textClockDate    != null) textClockDate.setTextColor(0xFFFFF0E6);
-
-        // ── Dim labels ────────────────────────────────────────────────────────
-        if (locationLabel    != null) locationLabel.setTextColor(dim);
-        if (batteryIndicator != null) batteryIndicator.setTextColor(dim);
-
-        // ── Card + pill backgrounds (programmatic GradientDrawable) ───────────
-        setRoundedBackground(weatherCard,     cardBg, border, 14f);
-        setRoundedBackground(dateCard,        cardBg, border, 14f);
-        setRoundedBackground(batteryIndicator, cardBg, border, 32f); // pill = large radius
-
-        // ── Refresh theme card selection highlight ────────────────────────────
-        refreshThemeCardSelections();
-    }
-
-    /** Builds and sets a GradientDrawable background on any View. */
-    private void setRoundedBackground(View v, int fill, int stroke, float radiusDp) {
-        if (v == null) return;
-        int pL = v.getPaddingLeft();
-        int pT = v.getPaddingTop();
-        int pR = v.getPaddingRight();
-        int pB = v.getPaddingBottom();
-        GradientDrawable d = new GradientDrawable();
-        d.setShape(GradientDrawable.RECTANGLE);
-        d.setColor(fill);
-        d.setStroke(dpToPx(1), stroke);
-        d.setCornerRadius(dpToPx(radiusDp));
-        v.setBackground(d);
-        v.setPadding(pL, pT, pR, pB);
-    }
-
-    private int dpToPx(float dp) {
-        return Math.round(dp * getResources().getDisplayMetrics().density);
-    }
-
-    // ─── Theme Picker ─────────────────────────────────────────────────────────
-
-    /**
-     * Builds one card per theme inside themeCardsContainer.
-     * Each card shows a gradient preview strip and the theme name.
-     * Called once in onCreate; selection highlights updated in applyTheme().
-     */
-    private void buildThemeCards() {
-        if (themeCardsContainer == null) return;
-        themeCardsContainer.removeAllViews();
-
-        for (int i = 0; i < ThemeManager.THEME_COUNT; i++) {
-            final int idx = i;
-
-            // ── Card container ────────────────────────────────────────────────
-            LinearLayout card = new LinearLayout(this);
-            card.setOrientation(LinearLayout.VERTICAL);
-            card.setGravity(Gravity.CENTER_HORIZONTAL);
-            LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(
-                    dpToPx(88), ViewGroup.LayoutParams.WRAP_CONTENT);
-            cardLp.setMargins(0, 0, dpToPx(12), 0);
-            card.setLayoutParams(cardLp);
-            card.setPadding(dpToPx(10), dpToPx(12), dpToPx(10), dpToPx(12));
-
-            // Dark card background — will gain a border when selected
-            GradientDrawable cardBg = new GradientDrawable();
-            cardBg.setShape(GradientDrawable.RECTANGLE);
-            cardBg.setColor(0xFF1C1C1C);
-            cardBg.setCornerRadius(dpToPx(16));
-            card.setBackground(cardBg);
-            card.setTag(idx); // used by refreshThemeCardSelections()
-
-            // ── Gradient colour preview strip ─────────────────────────────────
-            View previewStrip = new View(this);
-            LinearLayout.LayoutParams stripLp = new LinearLayout.LayoutParams(
-                    dpToPx(60), dpToPx(28));
-            stripLp.bottomMargin = dpToPx(10);
-            previewStrip.setLayoutParams(stripLp);
-            GradientDrawable gradient = new GradientDrawable(
-                    GradientDrawable.Orientation.LEFT_RIGHT,
-                    new int[]{ ThemeManager.PRIMARY[i], ThemeManager.SECONDARY[i] });
-            gradient.setCornerRadius(dpToPx(8));
-            previewStrip.setBackground(gradient);
-            card.addView(previewStrip);
-
-            // ── Three colour dots below the strip ─────────────────────────────
-            LinearLayout dotsRow = new LinearLayout(this);
-            dotsRow.setOrientation(LinearLayout.HORIZONTAL);
-            dotsRow.setGravity(Gravity.CENTER);
-            LinearLayout.LayoutParams dotsLp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            dotsLp.bottomMargin = dpToPx(8);
-            dotsRow.setLayoutParams(dotsLp);
-
-            addDot(dotsRow, ThemeManager.PRIMARY[i],   dpToPx(10));
-            addDot(dotsRow, ThemeManager.SECONDARY[i], dpToPx(8));
-            addDot(dotsRow, ThemeManager.DIM[i],       dpToPx(6));
-            card.addView(dotsRow);
-
-            // ── Theme name ────────────────────────────────────────────────────
-            TextView nameView = new TextView(this);
-            nameView.setText(ThemeManager.NAMES[i]);
-            nameView.setTextColor(0xFF999999);
-            nameView.setTextSize(8.5f);
-            nameView.setTypeface(nameView.getTypeface(), Typeface.BOLD);
-            nameView.setGravity(Gravity.CENTER);
-            nameView.setLetterSpacing(0.05f);
-            card.addView(nameView);
-
-            // ── Click → apply theme and close picker ──────────────────────────
-            card.setOnClickListener(v -> {
-                applyTheme(idx, true);
-                hideThemePicker();
-            });
-
-            themeCardsContainer.addView(card);
+    public void setSwipeEnabled(boolean enabled) {
+        if (faceViewPager != null) {
+            faceViewPager.setUserInputEnabled(enabled);
         }
     }
 
-    /** Adds a small circle dot of the given color to a parent LinearLayout. */
-    private void addDot(LinearLayout parent, int color, int sizePx) {
-        View dot = new View(this);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(sizePx, sizePx);
-        lp.setMargins(dpToPx(2), 0, dpToPx(2), 0);
-        dot.setLayoutParams(lp);
+    private void saveFace(int position) {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit().putInt(KEY_FACE, position).apply();
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Dot Indicators
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private void setupDots() {
+        setDotDrawable(dot0, 0x88FFFFFF);
+        setDotDrawable(dot1, 0x44FFFFFF);
+    }
+
+    private void updateDots(int activePosition) {
+        setDotDrawable(dot0, activePosition == 0 ? 0xBBFFFFFF : 0x44FFFFFF);
+        setDotDrawable(dot1, activePosition == 1 ? 0xBBFFFFFF : 0x44FFFFFF);
+    }
+
+    private void setDotDrawable(View dot, int color) {
+        if (dot == null) return;
         GradientDrawable d = new GradientDrawable();
         d.setShape(GradientDrawable.OVAL);
         d.setColor(color);
         dot.setBackground(d);
-        parent.addView(dot);
     }
 
-    /** Updates border highlight on each card to reflect current selection. */
-    private void refreshThemeCardSelections() {
-        if (themeCardsContainer == null) return;
-        for (int i = 0; i < themeCardsContainer.getChildCount(); i++) {
-            View child = themeCardsContainer.getChildAt(i);
-            if (child.getTag() == null) continue;
-            int idx = (int) child.getTag();
-            GradientDrawable bg = (GradientDrawable) child.getBackground();
-            if (bg == null) continue;
-            if (idx == currentTheme) {
-                bg.setStroke(dpToPx(2), ThemeManager.PRIMARY[idx]);
-                bg.setColor(0xFF242424);
-            } else {
-                bg.setStroke(dpToPx(1), 0x22FFFFFF);
-                bg.setColor(0xFF1C1C1C);
+    // ═════════════════════════════════════════════════════════════════════════
+    // Data Forwarding to Clock Face Fragments
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Push data to all Clock Face fragments that implement ClockFaceContract.
+     * Called from battery receiver and weather callback.
+     */
+    private void forwardBatteryToFaces(int percent, boolean isCharging) {
+        lastBatteryPercent   = percent;
+        lastBatteryCharging  = isCharging;
+
+        List<Fragment> fragments = getSupportFragmentManager().getFragments();
+        for (Fragment f : fragments) {
+            if (f instanceof ClockFaceContract && f.isAdded()) {
+                ((ClockFaceContract) f).onBatteryUpdate(percent, isCharging);
             }
         }
     }
 
-    private void showThemePicker() {
-        if (pickerVisible || themePickerOverlay == null) return;
-        pickerVisible = true;
-        themePickerOverlay.setVisibility(View.VISIBLE);
-        themePickerOverlay.setAlpha(0f);
-        themePickerOverlay.animate()
-                .alpha(1f).setDuration(220).start();
+    private void forwardWeatherToFaces(String tempText) {
+        lastWeatherText = tempText;
 
-        if (pickerSheet != null) {
-            pickerSheet.setTranslationY(dpToPx(400));
-            pickerSheet.animate()
-                    .translationY(0f)
-                    .setDuration(320)
-                    .setInterpolator(new DecelerateInterpolator(2.2f))
-                    .start();
+        List<Fragment> fragments = getSupportFragmentManager().getFragments();
+        for (Fragment f : fragments) {
+            if (f instanceof ClockFaceContract && f.isAdded()) {
+                ((ClockFaceContract) f).onWeatherUpdate(tempText);
+            }
         }
-    }
-
-    private void hideThemePicker() {
-        if (!pickerVisible || themePickerOverlay == null) return;
-        pickerVisible = false;
-
-        if (pickerSheet != null) {
-            pickerSheet.animate()
-                    .translationY(dpToPx(400))
-                    .setDuration(240)
-                    .setInterpolator(new DecelerateInterpolator())
-                    .start();
-        }
-
-        themePickerOverlay.animate()
-                .alpha(0f)
-                .setDuration(220)
-                .withEndAction(() -> themePickerOverlay.setVisibility(View.GONE))
-                .start();
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -435,28 +293,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         batteryReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                if (batteryIndicator == null) return;
-
                 int level  = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
                 int scale  = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
                 int status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
 
-                // EXTRA_LEVEL is raw; divide by scale for the real percentage
                 int percent = (scale > 0) ? Math.round(level * 100f / scale) : level;
 
                 boolean isCharging =
                         status == BatteryManager.BATTERY_STATUS_CHARGING
                                 || status == BatteryManager.BATTERY_STATUS_FULL;
 
-                String text = percent + "%";
-                if (isCharging) {
-                    text += "  ⚡";
-                    // Glowing secondary accent when plugged in
-                    batteryIndicator.setTextColor(ThemeManager.SECONDARY[currentTheme]);
-                } else {
-                    batteryIndicator.setTextColor(ThemeManager.DIM[currentTheme]);
-                }
-                batteryIndicator.setText(text);
+                forwardBatteryToFaces(percent, isCharging);
             }
         };
     }
@@ -536,25 +383,18 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     JSONObject cw   = root.getJSONObject("current_weather");
                     double tempC    = cw.getDouble("temperature");
 
-                    // Round to nearest integer for clean display
                     int rounded = (int) Math.round(tempC);
                     displayText = rounded + "°C";
                 }
                 conn.disconnect();
 
             } catch (Exception e) {
-                // Network unavailable or parse error — keep previous value
                 e.printStackTrace();
             }
 
-            // Only post UI update if we actually got a value
             if (displayText != null) {
                 final String finalText = displayText;
-                weatherHandler.post(() -> {
-                    if (tempView != null) {
-                        tempView.setText(finalText);
-                    }
-                });
+                weatherHandler.post(() -> forwardWeatherToFaces(finalText));
             }
         });
     }
