@@ -1,91 +1,237 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+    iOS 17 StandBy Mode aesthetic.
+    Root: pure black, full-bleed, edge-to-edge.
+    Left  : Giant digital clock — hour & minute in a bold neon-orange/coral accent.
+    Right : Two stacked widget cards — Weather (top) and Date (bottom).
+    Bottom: Pill-style battery island anchored to the screen bottom-centre.
+-->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/main"
+    android:id="@+id/root_container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000"
-    android:padding="0dp"
     tools:context=".MainActivity">
 
-    <!-- Container for burn-in prevention -->
+    <!-- ═══════════════════════════════════════════════════════════════════
+         MAIN CONTENT ROW — left clock  +  thin divider  +  right widgets
+         Centred vertically, fills the full width.
+         ═══════════════════════════════════════════════════════════════════ -->
     <LinearLayout
         android:id="@+id/clockContainer"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         android:orientation="horizontal"
-        android:gravity="center"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/batteryIndicator"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- Large left-aligned main time -->
-        <TextClock
-            android:id="@+id/textClockMain"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="32dp"
-            android:format12Hour="hh:mm"
-            android:format24Hour="HH:mm"
-            android:textColor="#88C7FF"
-            android:textSize="90sp"
-            android:fontFamily="sans-serif-black"
-            android:textStyle="bold"
-            android:gravity="start"
-            android:textAlignment="viewStart"
-            android:singleLine="true" />
-
-        <!-- Right-side compact widget stack -->
+        <!-- ═══ LEFT PANEL: Single-line auto-scaling h:mm clock ═══════ -->
         <LinearLayout
-            android:id="@+id/rightStack"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="0.35"
+            android:layout_height="match_parent"
+            android:layout_weight="1.65"
             android:orientation="vertical"
-            android:gravity="center_horizontal"
-            android:layout_marginEnd="24dp">
+            android:gravity="center">
 
-            <!-- Date (THU 25) - uses TextClock so it updates -->
+            <!--
+                Single TextClock showing full "h:mm" on ONE line.
+                autoSizeTextType=uniform lets it grow to fill the available
+                width, up to 200sp. sans-serif-black gives maximum stroke
+                thickness — readable from across a room.
+            -->
             <TextClock
-                android:id="@+id/dateShort"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:format12Hour="EEE d"
-                android:format24Hour="EEE d"
-                android:textAllCaps="true"
-                android:textColor="#FFFFFF"
-                android:textSize="32sp"
-                android:fontFamily="sans-serif-black"
+                android:id="@+id/textClockTime"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:format12Hour="h:mm"
+                android:format24Hour="HH:mm"
+                android:textColor="#FF6B35"
+                android:fontFamily="@font/nunito_black"
+                android:gravity="center"
                 android:textStyle="bold"
-                android:letterSpacing="0.05" />
+                android:singleLine="true"
+                android:ellipsize="none"
+                android:includeFontPadding="false"
+                android:letterSpacing="-0.03"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="40sp"
+                android:autoSizeMaxTextSize="220sp"
+                android:autoSizeStepGranularity="1sp" />
 
-            <!-- Temperature placeholder (74°). Replace value programmatically with live data. -->
-            <TextView
-                android:id="@+id/tempView"
-                android:layout_width="wrap_content"
+            <!-- AM/PM indicator — centred beneath the clock, clearly visible -->
+            <TextClock
+                android:id="@+id/textClockAmPm"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="74°"
-                android:textColor="#FFFFFF"
-                android:textSize="28sp"
-                android:layout_marginTop="6dp"
-                android:fontFamily="sans-serif-black"
-                android:textStyle="bold" />
-
-            <!-- Battery Indicator -->
-            <TextView
-                android:id="@+id/batteryIndicator"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Battery: --%"
-                android:textColor="#FFFFFF"
-                android:textSize="18sp"
-                android:layout_marginTop="6dp"
-                android:fontFamily="sans-serif-black"
-                android:textStyle="bold" />
+                android:format12Hour="a"
+                android:format24Hour=""
+                android:textColor="#FF9D6B"
+                android:textSize="22sp"
+                android:fontFamily="@font/nunito_black"
+                android:gravity="center"
+                android:letterSpacing="0.20"
+                android:textAllCaps="true"
+                android:layout_marginTop="4dp"
+                android:includeFontPadding="false" />
 
         </LinearLayout>
+
+        <!-- Thin luminous vertical divider -->
+        <View
+            android:layout_width="1.5dp"
+            android:layout_height="match_parent"
+            android:background="#2A1400"
+            android:layout_marginStart="14dp"
+            android:layout_marginEnd="14dp"
+            android:layout_gravity="center_vertical" />
+
+        <!-- ═══ RIGHT PANEL: Weather + Date widgets ══════════════════════ -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.6"
+            android:orientation="vertical"
+            android:gravity="center_vertical"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp">
+
+            <!-- ─── WEATHER WIDGET ─────────────────────────────────────── -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="@drawable/widget_card_bg"
+                android:padding="18dp">
+
+                <!-- Temperature — big, readable from across the room -->
+                <TextView
+                    android:id="@+id/tempView"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="––°"
+                    android:textColor="#FF9D6B"
+                    android:textSize="58sp"
+                    android:fontFamily="sans-serif-light"
+                    android:letterSpacing="-0.02"
+                    android:includeFontPadding="false"
+                    tools:text="28°C" />
+
+                <!-- City label — all-caps, muted but now legible -->
+                <TextView
+                    android:id="@+id/locationLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="BENGALURU"
+                    android:textColor="#5C3010"
+                    android:textSize="12sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.22"
+                    android:textAllCaps="true"
+                    android:layout_marginTop="2dp"
+                    android:includeFontPadding="false" />
+
+            </LinearLayout>
+
+            <!-- Gap between widgets -->
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="12dp" />
+
+            <!-- ─── DATE WIDGET ────────────────────────────────────────── -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="@drawable/widget_card_bg"
+                android:padding="18dp">
+
+                <!-- Day of week — bold orange label -->
+                <TextClock
+                    android:id="@+id/textClockDayName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:format12Hour="EEE"
+                    android:format24Hour="EEE"
+                    android:textAllCaps="true"
+                    android:textColor="#FF9D6B"
+                    android:textSize="18sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.22"
+                    android:includeFontPadding="false" />
+
+                <!-- Numerical date — large, dominant, crisp warm-white -->
+                <TextClock
+                    android:id="@+id/textClockDate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:format12Hour="d"
+                    android:format24Hour="d"
+                    android:textColor="#FFF0E6"
+                    android:textSize="72sp"
+                    android:fontFamily="sans-serif-light"
+                    android:letterSpacing="-0.02"
+                    android:includeFontPadding="false"
+                    android:layout_marginTop="-6dp" />
+
+                <!-- Month name — clearly visible, warm orange -->
+                <TextClock
+                    android:id="@+id/textClockMonth"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:format12Hour="MMMM"
+                    android:format24Hour="MMMM"
+                    android:textAllCaps="true"
+                    android:textColor="#FF9D6B"
+                    android:textSize="15sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.22"
+                    android:includeFontPadding="false"
+                    android:layout_marginTop="0dp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
     </LinearLayout>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         PILL STATUS ISLAND — battery indicator, bottom-centre of screen.
+         Mimics the iOS Dynamic Island / status capsule aesthetic.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <TextView
+        android:id="@+id/batteryIndicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="––%"
+        android:textColor="#3A1800"
+        android:textSize="11sp"
+        android:fontFamily="sans-serif-medium"
+        android:letterSpacing="0.12"
+        android:includeFontPadding="false"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:background="@drawable/pill_bg"
+        android:layout_marginBottom="14dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        tools:text="87% ⚡" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

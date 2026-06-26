@@ -1,26 +1,22 @@
 package com.kushal.deskclock;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.os.BatteryManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.os.BatteryManager;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
 
-import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -31,242 +27,267 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
-    private Handler burnInHandler;
-    private Runnable burnInRunnable;
-    private static final long BURN_IN_INTERVAL = 60000; // 60 seconds
-    private static final float MAX_OFFSET = 50f;
-    private Random random;
-    
-    private BroadcastReceiver batteryReceiver;
-    private TextView batteryIndicator;
-    
-    private SensorManager sensorManager;
-    private Sensor lightSensor;
-    private static final float LUX_THRESHOLD = 5f;
-    private static final float DIM_BRIGHTNESS = 0.05f;
-    private static final float NORMAL_BRIGHTNESS = 1.0f;
-    
+    // ─── Weather ──────────────────────────────────────────────────────────────
+    // Open-Meteo free API — no API key required.
+    // Bengaluru coordinates: 12.9716 N, 77.5946 E
+    private static final String WEATHER_URL =
+            "https://api.open-meteo.com/v1/forecast"
+                    + "?latitude=12.9716&longitude=77.5946"
+                    + "&current_weather=true"
+                    + "&temperature_unit=celsius";      // always fetch °C, display as-is
+    private static final long WEATHER_REFRESH_MS = 30 * 60_000L; // 30 minutes
+
     private TextView tempView;
     private Handler weatherHandler;
     private Runnable weatherRunnable;
-    private ExecutorService executorService;
-    private static final long WEATHER_REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes
-    private static final String WEATHER_API_URL = "https://api.open-meteo.com/v1/forecast?latitude=12.9716&longitude=77.5946&current_weather=true";
+    private ExecutorService weatherExecutor;
+
+    // ─── Battery ──────────────────────────────────────────────────────────────
+    private TextView batteryIndicator;
+    private BroadcastReceiver batteryReceiver;
+
+    // ─── Ambient light sensor ─────────────────────────────────────────────────
+    // Below LUX_DIM_THRESHOLD → screen dims to DIM_BRIGHTNESS.
+    // We add a small hysteresis gap so the screen doesn't flicker at the boundary.
+    private static final float LUX_DIM_THRESHOLD   = 5f;
+    private static final float LUX_BRIGHT_THRESHOLD = 10f;
+    private static final float DIM_BRIGHTNESS      = 0.04f;
+    private static final float NORMAL_BRIGHTNESS   = 1.0f;
+    private boolean isDimmed = false;
+
+    private SensorManager sensorManager;
+    private Sensor lightSensor;
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        EdgeToEdge.enable(this);
-        setContentView(R.layout.activity_main);
 
-        // Keep screen on indefinitely
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        // Enable immersive fullscreen mode
+        // ── Immersive fullscreen ──────────────────────────────────────────────
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-
-        // Hide both status bar and navigation bar
-        WindowInsetsControllerCompat insetsController = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-        if (insetsController != null) {
-            insetsController.hide(WindowInsetsCompat.Type.systemBars());
-            insetsController.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        WindowInsetsControllerCompat insetsCtrl =
+                WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        if (insetsCtrl != null) {
+            insetsCtrl.hide(WindowInsetsCompat.Type.systemBars());
+            insetsCtrl.setSystemBarsBehavior(
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
         }
 
-        // Handle insets properly - don't apply padding for fullscreen
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
-            // For fullscreen, we don't apply padding; let content extend to edges
-            return WindowInsetsCompat.CONSUMED;
-        });
+        // ── Keep screen on permanently ────────────────────────────────────────
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        // Initialize burn-in prevention
-        random = new Random();
-        burnInHandler = new Handler(Looper.getMainLooper());
-        setupBurnInPrevention();
+        setContentView(R.layout.activity_main);
 
-        // Get battery indicator TextView
+        // Suppress insets padding — we want edge-to-edge black
+        View rootView = findViewById(R.id.root_container);
+        rootView.setOnApplyWindowInsetsListener((v, insets) -> insets);
+
+        // ── Battery ───────────────────────────────────────────────────────────
         batteryIndicator = findViewById(R.id.batteryIndicator);
-
-        // Setup battery receiver
         setupBatteryReceiver();
 
-        // Initialize light sensor for adaptive brightness
+        // ── Light sensor ──────────────────────────────────────────────────────
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
             lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
         }
 
-        // Get temperature view and setup weather fetching
+        // ── Weather ───────────────────────────────────────────────────────────
         tempView = findViewById(R.id.tempView);
-        executorService = Executors.newSingleThreadExecutor();
+        weatherExecutor = Executors.newSingleThreadExecutor();
         weatherHandler = new Handler(Looper.getMainLooper());
-        setupWeatherRefresh();
-
-        // Fetch weather immediately on startup
-        fetchWeather();
+        setupWeatherRunnable();
     }
 
-    @Override
-    public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() == Sensor.TYPE_LIGHT) {
-            float lux = event.values[0];
-            WindowManager.LayoutParams layoutParams = getWindow().getAttributes();
-
-            if (lux < LUX_THRESHOLD) {
-                layoutParams.screenBrightness = DIM_BRIGHTNESS;
-            } else {
-                layoutParams.screenBrightness = NORMAL_BRIGHTNESS;
-            }
-            getWindow().setAttributes(layoutParams);
-        }
-    }
-
-    @Override
-    public void onAccuracyChanged(Sensor sensor, int accuracy) {
-        // No action needed
-    }
-
-    private void setupWeatherRefresh() {
-        weatherRunnable = new Runnable() {
-            @Override
-            public void run() {
-                fetchWeather();
-                weatherHandler.postDelayed(this, WEATHER_REFRESH_INTERVAL);
-            }
-        };
-    }
-
-    private void fetchWeather() {
-        executorService.execute(() -> {
-            try {
-                URL url = new URL(WEATHER_API_URL);
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("GET");
-                connection.setConnectTimeout(5000);
-                connection.setReadTimeout(5000);
-
-                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                StringBuilder response = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    response.append(line);
-                }
-                reader.close();
-                connection.disconnect();
-
-                JSONObject jsonResponse = new JSONObject(response.toString());
-                JSONObject currentWeather = jsonResponse.getJSONObject("current_weather");
-                double temperatureCelsius = currentWeather.getDouble("temperature");
-                
-                // Update UI on main thread
-                weatherHandler.post(() -> {
-                    if (tempView != null) {
-                        int tempFahrenheit = (int) (temperatureCelsius * 9 / 5 + 32);
-                        tempView.setText(tempFahrenheit + "°");
-                    }
-                });
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
-    }
-
-    private void setupBatteryReceiver() {
-        batteryReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                int level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
-                int status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
-                boolean isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
-                        status == BatteryManager.BATTERY_STATUS_FULL;
-
-                String batteryText = "Battery: " + level + "%";
-                if (isCharging) {
-                    batteryText += " ⚡";
-                }
-                if (batteryIndicator != null) {
-                    batteryIndicator.setText(batteryText);
-                }
-            }
-        };
-    }
-
-    private void setupBurnInPrevention() {
-        burnInRunnable = new Runnable() {
-            @Override
-            public void run() {
-                LinearLayout clockContainer = findViewById(R.id.clockContainer);
-                if (clockContainer != null) {
-                    float randomX = (random.nextFloat() * 2 * MAX_OFFSET) - MAX_OFFSET;
-                    float randomY = (random.nextFloat() * 2 * MAX_OFFSET) - MAX_OFFSET;
-                    clockContainer.setTranslationX(randomX);
-                    clockContainer.setTranslationY(randomY);
-                }
-                burnInHandler.postDelayed(this, BURN_IN_INTERVAL);
-            }
-        };
-    }
+    // ═════════════════════════════════════════════════════════════════════════
+    // Lifecycle
+    // ═════════════════════════════════════════════════════════════════════════
 
     @Override
     protected void onResume() {
         super.onResume();
-        // Start burn-in prevention
-        burnInHandler.post(burnInRunnable);
 
-        // Register battery receiver
+        // Battery — sticky broadcast, fire immediately
         if (batteryReceiver != null) {
-            IntentFilter batteryFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-            registerReceiver(batteryReceiver, batteryFilter, Context.RECEIVER_NOT_EXPORTED);
+            registerReceiver(
+                    batteryReceiver,
+                    new IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+                    Context.RECEIVER_NOT_EXPORTED);
         }
 
-        // Register light sensor listener
+        // Light sensor
         if (sensorManager != null && lightSensor != null) {
-            sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
+            sensorManager.registerListener(this, lightSensor,
+                    SensorManager.SENSOR_DELAY_NORMAL);
         }
 
-        // Start weather refresh
-        if (weatherHandler != null && weatherRunnable != null) {
-            weatherHandler.post(weatherRunnable);
-        }
+        // Weather — fetch now, then every 30 minutes
+        fetchWeatherAsync();
+        weatherHandler.postDelayed(weatherRunnable, WEATHER_REFRESH_MS);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        // Stop burn-in prevention and prevent memory leaks
-        burnInHandler.removeCallbacks(burnInRunnable);
 
-        // Unregister battery receiver
         if (batteryReceiver != null) {
             try {
                 unregisterReceiver(batteryReceiver);
-            } catch (IllegalArgumentException e) {
-                // Receiver was not registered
+            } catch (IllegalArgumentException ignored) {
+                // Was not registered (edge case on quick onCreate→onPause)
             }
         }
 
-        // Unregister light sensor listener
         if (sensorManager != null) {
             sensorManager.unregisterListener(this);
         }
 
-        // Stop weather refresh
-        if (weatherHandler != null && weatherRunnable != null) {
-            weatherHandler.removeCallbacks(weatherRunnable);
-        }
+        weatherHandler.removeCallbacks(weatherRunnable);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Clean up executor service
-        if (executorService != null && !executorService.isShutdown()) {
-            executorService.shutdown();
+        if (weatherExecutor != null && !weatherExecutor.isShutdown()) {
+            weatherExecutor.shutdownNow();
         }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Battery
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private void setupBatteryReceiver() {
+        batteryReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (batteryIndicator == null) return;
+
+                int level  = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+                int scale  = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
+                int status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+
+                // EXTRA_LEVEL is raw; divide by scale for the real percentage
+                int percent = (scale > 0) ? Math.round(level * 100f / scale) : level;
+
+                boolean isCharging =
+                        status == BatteryManager.BATTERY_STATUS_CHARGING
+                                || status == BatteryManager.BATTERY_STATUS_FULL;
+
+                String text = percent + "%";
+                if (isCharging) {
+                    text += "  ⚡";
+                    // Subtle colour shift when plugged in — warm amber glow
+                    batteryIndicator.setTextColor(0xFFFF9D6B);
+                } else {
+                    batteryIndicator.setTextColor(0xFF5C3010);
+                }
+                batteryIndicator.setText(text);
+            }
+        };
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Ambient light sensor  →  adaptive brightness
+    // ═════════════════════════════════════════════════════════════════════════
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        if (event.sensor.getType() != Sensor.TYPE_LIGHT) return;
+
+        float lux = event.values[0];
+        WindowManager.LayoutParams lp = getWindow().getAttributes();
+
+        if (!isDimmed && lux < LUX_DIM_THRESHOLD) {
+            lp.screenBrightness = DIM_BRIGHTNESS;
+            getWindow().setAttributes(lp);
+            isDimmed = true;
+        } else if (isDimmed && lux > LUX_BRIGHT_THRESHOLD) {
+            lp.screenBrightness = NORMAL_BRIGHTNESS;
+            getWindow().setAttributes(lp);
+            isDimmed = false;
+        }
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        // Not needed
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Weather  —  Open-Meteo, no API key
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private void setupWeatherRunnable() {
+        weatherRunnable = new Runnable() {
+            @Override
+            public void run() {
+                fetchWeatherAsync();
+                weatherHandler.postDelayed(this, WEATHER_REFRESH_MS);
+            }
+        };
+    }
+
+    /**
+     * Dispatches an HTTP GET to Open-Meteo on a background thread,
+     * parses current_weather.temperature (°C), and posts the result
+     * back to the main thread. Never touches the UI from the background.
+     */
+    private void fetchWeatherAsync() {
+        if (weatherExecutor == null || weatherExecutor.isShutdown()) return;
+
+        weatherExecutor.execute(() -> {
+            String displayText = null;
+
+            try {
+                URL url = new URL(WEATHER_URL);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(8_000);
+                conn.setReadTimeout(8_000);
+                conn.setUseCaches(false);
+
+                int responseCode = conn.getResponseCode();
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    BufferedReader reader =
+                            new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line);
+                    }
+                    reader.close();
+
+                    JSONObject root = new JSONObject(sb.toString());
+                    JSONObject cw   = root.getJSONObject("current_weather");
+                    double tempC    = cw.getDouble("temperature");
+
+                    // Round to nearest integer for clean display
+                    int rounded = (int) Math.round(tempC);
+                    displayText = rounded + "°C";
+                }
+                conn.disconnect();
+
+            } catch (Exception e) {
+                // Network unavailable or parse error — keep previous value
+                e.printStackTrace();
+            }
+
+            // Only post UI update if we actually got a value
+            if (displayText != null) {
+                final String finalText = displayText;
+                weatherHandler.post(() -> {
+                    if (tempView != null) {
+                        tempView.setText(finalText);
+                    }
+                });
+            }
+        });
     }
 }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Pill-shaped battery status island background.
+    Very dark, rounded-full capsule — mimics the iOS Dynamic Island look.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <!-- Near-black, slightly warm -->
+    <solid android:color="#CC0E0600" />
+
+    <!-- Hairline orange glow border -->
+    <stroke
+        android:width="1dp"
+        android:color="#33FF6B35" />
+
+    <!-- Full pill radius — set to a large value so it always rounds completely -->
+    <corners android:radius="32dp" />
+</shape>
