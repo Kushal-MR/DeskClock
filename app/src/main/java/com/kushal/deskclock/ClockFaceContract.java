@@ -29,5 +29,5 @@ public interface ClockFaceContract {
     /**
      * Called when a Spotify broadcast is received.
      */
-    default void onSpotifyUpdate(String track, String artist, String album, boolean isPlaying) {}
+    default void onSpotifyUpdate(String track, String artist, String album, boolean isPlaying, android.graphics.Bitmap albumArt) {}
 }

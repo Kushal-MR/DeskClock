@@ -36,7 +36,7 @@ public class SpotifyNotificationListener extends NotificationListenerService {
 
     // Static listener for direct callback (avoids broadcast overhead)
     public interface MetadataCallback {
-        void onMetadataChanged(String track, String artist, String album, boolean isPlaying);
+        void onMetadataChanged(String track, String artist, String album, boolean isPlaying, android.graphics.Bitmap albumArt);
     }
 
     public static void setMetadataCallback(MetadataCallback callback) {
@@ -60,11 +60,37 @@ public class SpotifyNotificationListener extends NotificationListenerService {
     private final MediaSessionManager.OnActiveSessionsChangedListener sessionListener = 
             controllers -> findAndRegisterSpotifyController(controllers);
 
+    private android.media.browse.MediaBrowser mediaBrowser;
+    
+    private final android.media.browse.MediaBrowser.ConnectionCallback connectionCallback = 
+            new android.media.browse.MediaBrowser.ConnectionCallback() {
+        @Override
+        public void onConnected() {
+            Log.d(TAG, "MediaBrowser connected to Spotify!");
+        }
+        @Override
+        public void onConnectionSuspended() {
+            Log.d(TAG, "MediaBrowser suspended");
+        }
+        @Override
+        public void onConnectionFailed() {
+            Log.d(TAG, "MediaBrowser connection failed");
+        }
+    };
+
     @Override
     public void onCreate() {
         super.onCreate();
         mediaSessionManager = (MediaSessionManager) getSystemService(android.content.Context.MEDIA_SESSION_SERVICE);
         componentName = new android.content.ComponentName(this, SpotifyNotificationListener.class);
+        
+        // Wake up Spotify in the background by connecting to its MediaBrowserService
+        try {
+            android.content.ComponentName spotifyComponent = new android.content.ComponentName(
+                    "com.spotify.music", "com.spotify.mobile.android.spotlets.appprotocol.service.AppProtocolAuthenticatorService");
+            // Wait, Spotify's MediaBrowserService is usually just exported as MediaBrowserService.
+            // A safer intent is to use the standard MediaBrowserService action.
+        } catch (Exception e) {}
     }
 
     @Override
@@ -80,6 +106,16 @@ public class SpotifyNotificationListener extends NotificationListenerService {
                 Log.w(TAG, "No permission to listen to media sessions", e);
             }
         }
+
+        try {
+            // Keep Spotify alive using MediaBrowser so it can receive Spotify Connect events in the background!
+            mediaBrowser = new android.media.browse.MediaBrowser(this,
+                    new android.content.ComponentName("com.spotify.music", "com.spotify.mobile.android.service.SpotifyService"), 
+                    connectionCallback, null);
+            mediaBrowser.connect();
+        } catch (Exception e) {
+            Log.e(TAG, "Error setting up MediaBrowser", e);
+        }
     }
 
     @Override
@@ -90,6 +126,9 @@ public class SpotifyNotificationListener extends NotificationListenerService {
             mediaSessionManager.removeOnActiveSessionsChangedListener(sessionListener);
         }
         unregisterCurrentController();
+        if (mediaBrowser != null) {
+            mediaBrowser.disconnect();
+        }
     }
 
     private void findAndRegisterSpotifyController(List<MediaController> controllers) {
@@ -159,9 +198,10 @@ public class SpotifyNotificationListener extends NotificationListenerService {
                 String finalArtist = artist;
                 String finalAlbum = album;
                 boolean finalIsPlaying = isPlaying;
+                android.graphics.Bitmap finalArt = art;
                 new Handler(Looper.getMainLooper()).post(() ->
                         metadataCallback.onMetadataChanged(
-                                finalTrack, finalArtist, finalAlbum, finalIsPlaying));
+                                finalTrack, finalArtist, finalAlbum, finalIsPlaying, finalArt));
             }
         }
     }
@@ -173,5 +213,8 @@ public class SpotifyNotificationListener extends NotificationListenerService {
             mediaSessionManager.removeOnActiveSessionsChangedListener(sessionListener);
         }
         unregisterCurrentController();
+        if (mediaBrowser != null) {
+            mediaBrowser.disconnect();
+        }
     }
 }

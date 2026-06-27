@@ -188,7 +188,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         }
 
         // Register the NotificationListener callback for MediaSession-based detection
-        SpotifyNotificationListener.setMetadataCallback((track, artist, album, isPlaying) -> {
+        SpotifyNotificationListener.setMetadataCallback((track, artist, album, isPlaying, albumArt) -> {
             if (track != null && artist != null) {
                 if (!track.equals(lastSpotifyTrack) || !artist.equals(lastSpotifyArtist)) {
                     lastSpotifyTrack = track;
@@ -202,7 +202,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 List<Fragment> fragments = getSupportFragmentManager().getFragments();
                 for (Fragment f : fragments) {
                     if (f instanceof ClockFaceContract && f.isAdded()) {
-                        ((ClockFaceContract) f).onSpotifyUpdate(track, artist, album, isPlaying);
+                        ((ClockFaceContract) f).onSpotifyUpdate(track, artist, album, isPlaying, albumArt);
                     }
                 }
             }
@@ -378,7 +378,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     List<Fragment> fragments = getSupportFragmentManager().getFragments();
                     for (Fragment f : fragments) {
                         if (f instanceof ClockFaceContract && f.isAdded()) {
-                            ((ClockFaceContract) f).onSpotifyUpdate(track, artist, album, isPlaying);
+                            ((ClockFaceContract) f).onSpotifyUpdate(track, artist, album, isPlaying, null);
                         }
                     }
                 }

@@ -179,24 +179,21 @@ public class SpotifyStandByFragment extends Fragment implements ClockFaceContrac
         }
     }
 
+    private android.graphics.Bitmap currentAlbumArtBitmap = null;
+
     @Override
-    public void onSpotifyUpdate(String track, String artist, String album, boolean isPlaying) {
+    public void onSpotifyUpdate(String track, String artist, String album, boolean isPlaying, android.graphics.Bitmap albumArt) {
         if (!isAdded()) return;
 
-        if (!track.equals(currentTrack) || !artist.equals(currentArtist)) {
+        boolean textChanged = !track.equals(currentTrack) || !artist.equals(currentArtist);
+
+        if (textChanged) {
             currentTrack = track;
             currentArtist = artist;
 
             crossfadeText(trackName, track);
             crossfadeText(artistName, artist);
             crossfadeText(albumName, album);
-
-            // Fetch new album art colors
-            if (SpotifyNotificationListener.currentAlbumArt != null) {
-                SpotifyDataFetcher.extractColorsFromBitmap(SpotifyNotificationListener.currentAlbumArt, this::animateToNewColors);
-            } else {
-                SpotifyDataFetcher.fetchAlbumArtAndColors(track, artist, this::animateToNewColors);
-            }
 
             // Fetch new artist facts
             factHandler.removeCallbacks(factRunnable);
@@ -213,6 +210,17 @@ public class SpotifyStandByFragment extends Fragment implements ClockFaceContrac
                     }
                 }
             });
+        }
+
+        // Always check if the album art has changed, even if the track text is the same.
+        // This fixes the bug where Spotify downloads the album art a few milliseconds after the track changes!
+        if (albumArt != currentAlbumArtBitmap) {
+            currentAlbumArtBitmap = albumArt;
+            if (albumArt != null) {
+                SpotifyDataFetcher.extractColorsFromBitmap(albumArt, this::animateToNewColors);
+            } else {
+                SpotifyDataFetcher.fetchAlbumArtAndColors(track, artist, this::animateToNewColors);
+            }
         }
     }
 
