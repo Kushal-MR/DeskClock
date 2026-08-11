@@ -1,12 +1,12 @@
-# 🕰️ DeskClock
+#  DeskClock
 
 An always-on smart desk display for Android — turn any old phone into a gorgeous bedside / desk clock with live weather, adaptive brightness, and Spotify "Now Playing" integration.
 
-> **My first Android app!** I built this in Java (instead of Kotlin) because I was just starting out with Android development and Java was what I knew. The goal was to repurpose a spare phone sitting in a desk dock into something that actually looks and feels premium.
+> I built this in Java (instead of Kotlin) because I was just starting out with Android development and Java was what I knew. The goal was to repurpose a spare phone sitting in a desk dock into something that actually looks and feels premium.
 
 ---
 
-## ✨ What It Does
+## What It Does
 
 DeskClock runs in permanent landscape fullscreen and offers **three swipable clock faces**, each with its own visual personality. The app keeps the screen always on, automatically dims in dark rooms using the light sensor, and shows live weather & battery status across all faces.
 
@@ -18,35 +18,15 @@ A vintage airport / train-station mechanical flip clock. Each digit animates wit
 
 ### Face 3 — Spotify Now Playing
 The fun one. When music starts playing on Spotify, the app **automatically swipes to this face** and shows:
-- 🎵 Track name, artist, and album
-- 🖼️ High-res album artwork
-- 🌈 A dynamic ambient background glow — colors are extracted live from the album cover
-- 📖 Rotating artist trivia facts pulled from Wikipedia (crossfades every 15 seconds)
+- Track name, artist, and album
+- High-res album artwork
+- A dynamic ambient background glow — colors are extracted live from the album cover
+- Rotating artist trivia facts pulled from Wikipedia (crossfades every 15 seconds)
 
 No Spotify API keys or OAuth login needed — it reads the active media session directly from Android's notification system.
 
 ---
 
-## 🏗️ Architecture
-
-```
-┌──────────────────────────────────────────────┐
-│                 MainActivity                  │
-│  • Ambient light sensor → auto-brightness    │
-│  • Open-Meteo weather polling (every 30 min) │
-│  • Battery state BroadcastReceiver           │
-│  • Spotify media session listener            │
-└──────────────────┬───────────────────────────┘
-                   │  pushes data via ClockFaceContract
-                   ▼
-          ┌─── ViewPager2 ───┐
-          │                  │
-   ┌──────┴──────┐  ┌───────┴───────┐  ┌────────────────┐
-   │  Modern     │  │  Retro Split  │  │  Spotify Now   │
-   │  StandBy    │  │  Flap         │  │  Playing       │
-   │  Fragment   │  │  Fragment     │  │  Fragment      │
-   └─────────────┘  └───────────────┘  └────────────────┘
-```
 
 **Key design decisions:**
 - **`ClockFaceContract`** — a simple interface (`onBatteryUpdate`, `onWeatherUpdate`, `onSpotifyUpdate`) that all fragments implement. The Activity owns the services; fragments just render.
@@ -57,7 +37,7 @@ No Spotify API keys or OAuth login needed — it reads the active media session 
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 app/src/main/java/com/kushal/deskclock/
@@ -81,7 +61,7 @@ app/src/main/java/com/kushal/deskclock/
 
 ---
 
-## 📱 Setup
+## Setup
 
 ### Prerequisites
 - Android Studio
@@ -108,7 +88,7 @@ The Spotify face requires **Notification Listener** permission so the app can re
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
@@ -126,6 +106,6 @@ The Spotify face requires **Notification Listener** permission so the app can re
 
 ---
 
-## 📝 License
+## License
 
 This is a personal project. Feel free to explore, learn from, or fork it.
