@@ -70,13 +70,26 @@ public class SpotifyNotificationListener extends NotificationListenerService {
         }
         @Override
         public void onConnectionSuspended() {
-            Log.d(TAG, "MediaBrowser suspended");
+            Log.d(TAG, "MediaBrowser suspended - attempting to reconnect to wake Spotify up...");
+            retryBrowserConnection();
         }
         @Override
         public void onConnectionFailed() {
-            Log.d(TAG, "MediaBrowser connection failed");
+            Log.d(TAG, "MediaBrowser connection failed - will retry later");
+            new Handler(Looper.getMainLooper()).postDelayed(() -> retryBrowserConnection(), 10000);
         }
     };
+    
+    private void retryBrowserConnection() {
+        if (mediaBrowser != null) {
+            try {
+                mediaBrowser.disconnect();
+                mediaBrowser.connect();
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to reconnect MediaBrowser", e);
+            }
+        }
+    }
 
     @Override
     public void onCreate() {
@@ -108,11 +121,22 @@ public class SpotifyNotificationListener extends NotificationListenerService {
         }
 
         try {
-            // Keep Spotify alive using MediaBrowser so it can receive Spotify Connect events in the background!
-            mediaBrowser = new android.media.browse.MediaBrowser(this,
-                    new android.content.ComponentName("com.spotify.music", "com.spotify.mobile.android.service.SpotifyService"), 
-                    connectionCallback, null);
-            mediaBrowser.connect();
+            // Dynamically find Spotify's actual MediaBrowserService
+            android.content.Intent intent = new android.content.Intent(android.service.media.MediaBrowserService.SERVICE_INTERFACE);
+            intent.setPackage("com.spotify.music");
+            java.util.List<android.content.pm.ResolveInfo> resolveInfos = getPackageManager().queryIntentServices(intent, 0);
+            
+            if (resolveInfos != null && !resolveInfos.isEmpty()) {
+                android.content.pm.ServiceInfo serviceInfo = resolveInfos.get(0).serviceInfo;
+                android.content.ComponentName spotifyBrowserComponent = new android.content.ComponentName(serviceInfo.packageName, serviceInfo.name);
+                
+                // Keep Spotify alive using MediaBrowser so it can receive Spotify Connect events in the background!
+                mediaBrowser = new android.media.browse.MediaBrowser(this, spotifyBrowserComponent, connectionCallback, null);
+                mediaBrowser.connect();
+                Log.d(TAG, "Attempting to connect to Spotify MediaBrowserService: " + serviceInfo.name);
+            } else {
+                Log.w(TAG, "Could not find Spotify MediaBrowserService on this device.");
+            }
         } catch (Exception e) {
             Log.e(TAG, "Error setting up MediaBrowser", e);
         }
