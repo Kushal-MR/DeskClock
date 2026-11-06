@@ -79,7 +79,7 @@ public class SpotifyNotificationListener extends NotificationListenerService {
             new Handler(Looper.getMainLooper()).postDelayed(() -> retryBrowserConnection(), 10000);
         }
     };
-    
+
     private void retryBrowserConnection() {
         if (mediaBrowser != null) {
             try {
@@ -125,11 +125,11 @@ public class SpotifyNotificationListener extends NotificationListenerService {
             android.content.Intent intent = new android.content.Intent(android.service.media.MediaBrowserService.SERVICE_INTERFACE);
             intent.setPackage("com.spotify.music");
             java.util.List<android.content.pm.ResolveInfo> resolveInfos = getPackageManager().queryIntentServices(intent, 0);
-            
+
             if (resolveInfos != null && !resolveInfos.isEmpty()) {
                 android.content.pm.ServiceInfo serviceInfo = resolveInfos.get(0).serviceInfo;
                 android.content.ComponentName spotifyBrowserComponent = new android.content.ComponentName(serviceInfo.packageName, serviceInfo.name);
-                
+
                 // Keep Spotify alive using MediaBrowser so it can receive Spotify Connect events in the background!
                 mediaBrowser = new android.media.browse.MediaBrowser(this, spotifyBrowserComponent, connectionCallback, null);
                 mediaBrowser.connect();
